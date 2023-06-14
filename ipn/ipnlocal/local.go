@@ -2583,7 +2583,7 @@ func (b *LocalBackend) checkSSHPrefsLocked(p *ipn.Prefs) error {
 		if distro.Get() == distro.QNAP && !envknob.UseWIPCode() {
 			return errors.New("The Tailscale SSH server does not run on QNAP.")
 		}
-		checkSELinux()
+		b.updateSELinuxHealthWarning()
 		// otherwise okay
 	case "darwin":
 		// okay only in tailscaled mode for now.
@@ -4705,12 +4705,17 @@ func (b *LocalBackend) sshServerOrInit() (_ SSHServer, err error) {
 
 var warnSSHSELinux = health.NewWarnable()
 
-func checkSELinux() {
+// IsSELinuxEnforcing reports whether SELinux is in "Enforcing" mode.
+func IsSELinuxEnforcing() bool {
 	if runtime.GOOS != "linux" {
-		return
+		return false
 	}
 	out, _ := exec.Command("getenforce").Output()
-	if string(bytes.TrimSpace(out)) == "Enforcing" {
+	return string(bytes.TrimSpace(out)) == "Enforcing"
+}
+
+func (b *LocalBackend) updateSELinuxHealthWarning() {
+	if IsSELinuxEnforcing() {
 		warnSSHSELinux.Set(errors.New("SELinux is enabled; Tailscale SSH may not work. See https://tailscale.com/s/ssh-selinux"))
 	} else {
 		warnSSHSELinux.Set(nil)
@@ -4722,7 +4727,7 @@ func (b *LocalBackend) handleSSHConn(c net.Conn) (err error) {
 	if err != nil {
 		return err
 	}
-	checkSELinux()
+	b.updateSELinuxHealthWarning()
 	return s.HandleSSHConn(c)
 }
 
