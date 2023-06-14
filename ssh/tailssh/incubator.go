@@ -113,6 +113,7 @@ func (ss *sshSession) newIncubatorCommand() (cmd *exec.Cmd) {
 		"--remote-ip=" + ci.src.Addr().String(),
 		"--has-tty=false", // updated in-place by startWithPTY
 		"--tty-name=",     // updated in-place by startWithPTY
+		"--home-dir=" + lu.HomeDir,
 	}
 
 	if isSFTP {
@@ -177,6 +178,7 @@ type incubatorArgs struct {
 	isShell      bool
 	loginCmdPath string
 	cmdArgs      []string
+	homeDir      string
 }
 
 func parseIncubatorArgs(args []string) (a incubatorArgs) {
@@ -193,6 +195,7 @@ func parseIncubatorArgs(args []string) (a incubatorArgs) {
 	flags.BoolVar(&a.isShell, "shell", false, "is launching a shell (with no cmds)")
 	flags.BoolVar(&a.isSFTP, "sftp", false, "run sftp server (cmd is ignored)")
 	flags.StringVar(&a.loginCmdPath, "login-cmd", "", "the path to `login` cmd")
+	flags.StringVar(&a.homeDir, "home-dir", "/", "the path to user `$HOME` directory")
 	flags.Parse(args)
 	a.cmdArgs = flags.Args()
 	return a
@@ -283,6 +286,14 @@ func beIncubator(args []string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
+
+	// ss.logf("DEREK cmd=%v homedir=%v", cmd.Path, cmd.Dir)
+	fmt.Fprintf(os.Stdout, "DEREK cmd=%v homedir=%v\r\n", cmd.Path, cmd.Dir)
+	if _, err := os.Stat(ia.homeDir); err != nil && os.IsNotExist(err) {
+		cmd.Dir = "/"
+	} else {
+		cmd.Dir = ia.homeDir
+	}
 
 	if ia.hasTTY {
 		// If we were launched with a tty then we should
@@ -433,16 +444,7 @@ func (ss *sshSession) launchProcess() error {
 	ss.cmd = ss.newIncubatorCommand()
 
 	cmd := ss.cmd
-	homeDir := ss.conn.localUser.HomeDir
-	if _, err := os.Stat(homeDir); err == nil {
-		cmd.Dir = homeDir
-	} else if os.IsNotExist(err) {
-		// If the home directory doesn't exist, we can't chdir to it.
-		// Instead, we'll chdir to the root directory.
-		cmd.Dir = "/"
-	} else {
-		return err
-	}
+
 	cmd.Env = envForUser(ss.conn.localUser)
 	for _, kv := range ss.Environ() {
 		if acceptEnvPair(kv) {
@@ -691,6 +693,15 @@ func (ss *sshSession) startWithStdPipes() (err error) {
 	ss.cmd.Stdout = wrStdout
 	ss.cmd.Stderr = wrStderr
 	ss.childPipes = []io.Closer{rdStdin, wrStdout, wrStderr}
+
+	// Tests fails without setting cmd.Dir here.
+	// Use localUser HomeDir if possible when launching incubator
+	if _, err := os.Stat(ss.conn.localUser.HomeDir); ss.cmd.Dir == "" && err == nil {
+		ss.logf("DEREK cmd=%v homedir=%v", ss.cmd.Path, ss.cmd.Dir)
+		// fmt.Fprintf(ss, "DEREK cmd=%v homedir=%v\r\n", cmd.Path, cmd.Dir)
+		ss.cmd.Dir = ss.conn.localUser.HomeDir
+	}
+
 	return ss.cmd.Start()
 }
 
