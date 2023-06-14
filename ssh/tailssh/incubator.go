@@ -112,6 +112,7 @@ func (ss *sshSession) newIncubatorCommand() (cmd *exec.Cmd) {
 		"--remote-ip=" + ci.src.Addr().String(),
 		"--has-tty=false", // updated in-place by startWithPTY
 		"--tty-name=",     // updated in-place by startWithPTY
+		"--home-dir=" + ss.conn.localUser.HomeDir,
 	}
 
 	if isSFTP {
@@ -168,6 +169,7 @@ type incubatorArgs struct {
 	isShell      bool
 	loginCmdPath string
 	cmdArgs      []string
+	homeDir      string
 }
 
 func parseIncubatorArgs(args []string) (a incubatorArgs) {
@@ -184,6 +186,7 @@ func parseIncubatorArgs(args []string) (a incubatorArgs) {
 	flags.BoolVar(&a.isShell, "shell", false, "is launching a shell (with no cmds)")
 	flags.BoolVar(&a.isSFTP, "sftp", false, "run sftp server (cmd is ignored)")
 	flags.StringVar(&a.loginCmdPath, "login-cmd", "", "the path to `login` cmd")
+	flags.StringVar(&a.homeDir, "home-dir", "/", "the path to user `$HOME` directory")
 	flags.Parse(args)
 	a.cmdArgs = flags.Args()
 	return a
@@ -269,6 +272,12 @@ func beIncubator(args []string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
+
+	if _, err := os.Stat(ia.homeDir); err != nil && os.IsNotExist(err) {
+		cmd.Dir = "/"
+	} else {
+		cmd.Dir = ia.homeDir
+	}
 
 	if ia.hasTTY {
 		// If we were launched with a tty then we should
@@ -419,16 +428,7 @@ func (ss *sshSession) launchProcess() error {
 	ss.cmd = ss.newIncubatorCommand()
 
 	cmd := ss.cmd
-	homeDir := ss.conn.localUser.HomeDir
-	if _, err := os.Stat(homeDir); err == nil {
-		cmd.Dir = homeDir
-	} else if os.IsNotExist(err) {
-		// If the home directory doesn't exist, we can't chdir to it.
-		// Instead, we'll chdir to the root directory.
-		cmd.Dir = "/"
-	} else {
-		return err
-	}
+
 	cmd.Env = envForUser(ss.conn.localUser)
 	for _, kv := range ss.Environ() {
 		if acceptEnvPair(kv) {
