@@ -288,7 +288,7 @@ func beIncubator(args []string) error {
 	cmd.Env = os.Environ()
 
 	// ss.logf("DEREK cmd=%v homedir=%v", cmd.Path, cmd.Dir)
-	fmt.Fprintf(os.Stdout, "DEREK cmd=%v homedir=%v\r\n", cmd.Path, cmd.Dir)
+	// fmt.Fprintf(os.Stdout, "DEREK cmd=%v homedir=%v\r\n", cmd.Path, cmd.Dir)
 	if _, err := os.Stat(ia.homeDir); err != nil && os.IsNotExist(err) {
 		cmd.Dir = "/"
 	} else {
@@ -697,7 +697,7 @@ func (ss *sshSession) startWithStdPipes() (err error) {
 	// Tests fails without setting cmd.Dir here.
 	// Use localUser HomeDir if possible when launching incubator
 	if _, err := os.Stat(ss.conn.localUser.HomeDir); ss.cmd.Dir == "" && err == nil {
-		ss.logf("DEREK cmd=%v homedir=%v", ss.cmd.Path, ss.cmd.Dir)
+		// ss.logf("DEREK cmd=%v homedir=%v", ss.cmd.Path, ss.cmd.Dir)
 		// fmt.Fprintf(ss, "DEREK cmd=%v homedir=%v\r\n", cmd.Path, cmd.Dir)
 		ss.cmd.Dir = ss.conn.localUser.HomeDir
 	}
